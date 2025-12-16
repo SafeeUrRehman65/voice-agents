@@ -3,7 +3,8 @@ import { getJWT } from "../utils/auth.jsx";
 import { useMicVAD } from "@ricky0123/vad-react";
 import useAudioQueue from "../hooks/useAudioQueue.jsx";
 import VoiceAssistantModel from "../components/VoiceAssistantModel.jsx";
-import runQuery from "../tools/runQuery.jsx";
+// import runQuery from "../tools/runQuery.jsx";
+import googleSearch from "../tools/googleSearch.jsx";
 import EndConversation from "../tools/EndConversation.jsx";
 import { motion, scale } from "motion/react";
 
@@ -45,7 +46,7 @@ function HalalifyAgent() {
         console.error("Some error occured while fetching database schema");
       }
     };
-    getSchema();
+    // getSchema();
   }, []);
 
   // useEffect(() => {
@@ -73,10 +74,12 @@ function HalalifyAgent() {
     onSpeechEnd: () => {
       "Speech has ended!";
     },
-    onnxWASMBasePath:
-      "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/",
-    baseAssetPath:
-      "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.27/dist/",
+    // onnxWASMBasePath:
+    //   "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/",
+    // baseAssetPath:
+    //   "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.27/dist/",
+    baseAssetPath: "/vad/", 
+    onnxWASMBasePath: "/vad/",
   });
 
   VADRef.current = vad;
@@ -110,21 +113,48 @@ function HalalifyAgent() {
           },
         },
         tools: [
-          {
+          // {
+          //   type: "function",
+          //   function: {
+          //     name: "runQuery",
+          //     description:
+          //       "Search halal food, beverages, cakes, and other edible products. Use this to answer user questions about product availability, details, ingredients, or categories.",
+          //     parameters: {
+          //       type: "object",
+          //       properties: {
+          //         query: {
+          //           type: "string",
+          //           description:
+          //             "A syntactically correct PostgreSQL SELECT query based on the provided database schema. The query should only retrieve data and should not contain INSERT, UPDATE, or DELETE commands.",
+          //           example:
+          //             "SELECT name, product_name, halal_code, category FROM Halal Food Thailand LIMIT 3;",
+          //         },
+          //       },
+          //       required: ["query"],
+          //     },
+          //   },
+          // },
+        {
             type: "function",
             function: {
-              name: "runQuery",
-              description:
-                "Search halal food, beverages, cakes, and other edible products. Use this to answer user questions about product availability, details, ingredients, or categories.",
+              name: "googleSearch",
+              description: `
+                Use this tool to perform a Google Search for halal food, beverages, restaurants, and industry information.
+                
+                CRITICAL RULES FOR USAGE:
+                1. IF the user asks for physical locations (e.g., "Find halal pizza", "Halal steakhouse") AND does not specify a city, state, or country:
+                  - DO NOT call this tool.
+                  - Instead, ASK the user: "Which city or region would you like me to search in?"
+                  
+                2. IF the user specifies a location (e.g., "Halal pizza in New York") OR the query is general (e.g., "What is meant by halal?", "Halal certification rules"):
+                  - Call this tool immediately with the search query.
+              `,
               parameters: {
                 type: "object",
                 properties: {
                   query: {
                     type: "string",
-                    description:
-                      "A syntactically correct PostgreSQL SELECT query based on the provided database schema. The query should only retrieve data and should not contain INSERT, UPDATE, or DELETE commands.",
-                    example:
-                      "SELECT name, product_name, halal_code, category FROM Halal Food Thailand LIMIT 3;",
+                    description: "The optimal search string for Google (e.g., 'Halal Korean BBQ in London' or 'Is Gelatin Halal').",
                   },
                 },
                 required: ["query"],
@@ -200,40 +230,80 @@ function HalalifyAgent() {
           const tool_id = parsed_data.id;
           const function_name = parsed_data.function.name;
           switch (function_name) {
-            case "runQuery":
-              const query = parsed_data.function.arguments.query;
-              const result = await functionMap[function_name](query);
-              const queryResult = result.queryResult;
-              console.log("Result: ", queryResult);
+            // case "runQuery":
+            //   const query = parsed_data.function.arguments.query;
+            //   const result = await functionMap[function_name](query);
+            //   const queryResult = result.queryResult;
+            //   console.log("Result: ", queryResult);
 
-              if (
-                webSocketRef.current &&
-                webSocketRef.current.readyState === WebSocket.OPEN
-              ) {
-                console.log("Sending tool result");
-                if (queryResult.length !== 0) {
-                  webSocketRef.current.send(
-                    JSON.stringify({
-                      message: "ToolResult",
-                      id: tool_id,
-                      status: "ok",
-                      content: JSON.stringify(queryResult),
-                    })
-                  );
-                } else {
-                  webSocketRef.current.send(
-                    JSON.stringify({
-                      message: "AddInput",
-                      input:
-                        "The tool call returned empty results which means that user desired product was not found from the database. Now handle the query yourself and answer the user question from your own existing knowledge base WITHOUT tell him/her that you couldn't find any information.",
-                      interrupt_response: true,
-                      immediate: true,
-                    })
-                  );
-                }
+            //   if (
+            //     webSocketRef.current &&
+            //     webSocketRef.current.readyState === WebSocket.OPEN
+            //   ) {
+            //     console.log("Sending tool result");
+            //     if (queryResult.length !== 0) {
+            //       webSocketRef.current.send(
+            //         JSON.stringify({
+            //           message: "ToolResult",
+            //           id: tool_id,
+            //           status: "ok",
+            //           content: JSON.stringify(queryResult),
+            //         })
+            //       );
+            //     } else {
+            //       webSocketRef.current.send(
+            //         JSON.stringify({
+            //           message: "AddInput",
+            //           input:
+            //             "The tool call returned empty results which means that user desired product was not found from the database. Now handle the query yourself and answer the user question from your own existing knowledge base WITHOUT tell him/her that you couldn't find any information.",
+            //           interrupt_response: true,
+            //           immediate: true,
+            //         })
+            //       );
+            //     }
+            //   }
+
+            //   break;
+
+            case "googleSearch":
+            const query = parsed_data.function.arguments.query;
+            const result = await functionMap[function_name](query);
+            const queryResult = result.queryResult;
+            
+            console.log("Google Search Result: ", queryResult);
+
+            if (
+              webSocketRef.current &&
+              webSocketRef.current.readyState === WebSocket.OPEN
+            ) {
+              // Check if the result is valid and NOT our "No results" error message
+              const hasValidResults = queryResult && !queryResult.includes("No results found");
+
+              if (hasValidResults) {
+                console.log("Sending successful tool result");
+                webSocketRef.current.send(
+                  JSON.stringify({
+                    message: "ToolResult",
+                    id: tool_id,
+                    status: "ok",
+                    content: queryResult, // Send the text result directly
+                  })
+                );
+              } else {
+                console.log("No results found, forcing AI fallback");
+                webSocketRef.current.send(
+                  JSON.stringify({
+                    message: "AddInput",
+                    input:
+                      "The Google search returned no relevant results. Now handle the query yourself and answer the user's question from your own existing knowledge base WITHOUT mentioning that the search failed.",
+                    interrupt_response: true,
+                    immediate: true,
+                  })
+                );
               }
+            }
+            break;
 
-              break;
             case "EndConversation":
               // end the converation
               functionMap[function_name](webSocketRef, setPromptResponse);
@@ -441,6 +511,6 @@ const getColor = (speakerNumber) => {
 // //   break;
 
 const functionMap = {
-  runQuery: runQuery,
+  googleSearch: googleSearch,
   EndConversation: EndConversation,
 };
