@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import "./App.css";
-import HalalifyAgent from "./pages/HalalifyAgent";
+import HalalifyVoiceAgent from "./pages/HalalifyVoiceAgent";
+import HalalifyChatAgent from "./pages/HalalifyChatAgent";
 import AGPharmaAgent from "./pages/AGPharmaAgent";
 import LandingPage from "./pages/LandingPage";
 import LLMProvider from "./providers/LLMProviders";
@@ -13,7 +14,11 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          <Route path="/halalify-voice-agent" element={<HalalifyAgent />} />
+          <Route
+            path="/halalify-voice-agent"
+            element={<HalalifyVoiceAgent />}
+          />
+          <Route path="/halalify-chat-agent" element={<HalalifyChatAgent />} />
           <Route path="/agp-voice-agent" element={<AGPharmaAgent />} />
 
           <Route

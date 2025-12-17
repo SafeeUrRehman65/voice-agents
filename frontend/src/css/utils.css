@@ -1,0 +1,12 @@
+/* This WILL work in Chrome */
+.scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.scrollbar::-webkit-scrollbar-track {
+  background: #000000;
+}
+
+.scrollbar::-webkit-scrollbar-thumb {
+  background: #000000;
+}
