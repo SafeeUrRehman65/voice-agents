@@ -3,6 +3,7 @@ import { createAgent } from "langchain";
 import { ChatGroq } from "@langchain/groq";
 import { HumanMessage } from "@langchain/core/messages";
 import googleSearch from "../tools/googleSearch.js";
+import { analyzeImage } from './visionService.js';
 import { WebSocketServer } from "ws";
 
 dotenv.config();
@@ -46,6 +47,25 @@ End the conversation and disconnect the WebSocket when the user wants to end it.
 - If no relevant or empty results are obtained after calling the "googleSearch" tool:
   - Answer the user using your own knowledge.
   - **Do not** tell the user that the tool returned no results.
+  
+### IMAGE ANALYSIS & RESTRICTIONS
+
+**Scope:**
+You can only analyze images related to:
+1. Food & Beverages (Labels, Ingredients, Packaging).
+2. Cosmetics & Medicines (Ingredients lists).
+3. Halal Logos or Certificates.
+4. Tourist spots (Mosques, Restaurants).
+
+**Strict Restrictions:**
+- **DO NOT** analyze images of:
+  - Human body parts (hands, faces, selfies).
+  - Sports equipment (footballs, bats).
+  - Vehicles, furniture, or random daily objects.
+  - Anything sexually explicit or haram by nature.
+
+- If an image falls outside the "Halal" scope, reply politely: 
+  "I specialize only in Halal matters (food, cosmetics, tourism). I cannot analyze this image as it appears unrelated."
 `;
 
 const halalify = createAgent({
@@ -71,30 +91,83 @@ const startChat = () => {
 
     socket.on("message", async (message) => {
       console.log(`Message received from client ${message}`);
-      const parsed_message = JSON.parse(message);
-      const message_type = parsed_message.type;
-      switch (message_type) {
-        case "HumanMessage":
-          //logic to send human message to our agent
-          const human_message = parsed_message.human_message;
+      try {
+        const parsed_message = JSON.parse(message);
+        const message_type = parsed_message.type;
 
-          const response = await halalify.invoke({
-            messages: [new HumanMessage(human_message)],
-          });
+        switch (message_type) {
+          case "HumanMessage":
+            const human_message = parsed_message.human_message;
 
-          console.log("AI Response", response.messages[1].content);
-          const agentResponse = response.messages[1].content;
-          socket.send(
-            JSON.stringify({
-              type: "AIMessage",
-              AIMessage: agentResponse || "",
-            })
-          );
-          break;
-        default:
-          break;
+            const response = await halalify.invoke({
+              messages: [new HumanMessage(human_message)],
+            });
+
+            const agentResponse = response.messages[1].content;
+            
+            socket.send(
+              JSON.stringify({
+                type: "AIMessage",
+                AIMessage: agentResponse || "",
+              })
+            );
+            break;
+
+          case "ImageMessage":
+            console.log("📸 Image received in Backend");
+            
+            socket.send(JSON.stringify({
+                type: "AIMessage",
+                AIMessage: "🔍 Analyzing image..."
+            }));
+
+            const userPrompt = parsed_message.prompt; 
+
+            const imageAnalysis = await analyzeImage(parsed_message.image, userPrompt);
+
+            socket.send(JSON.stringify({
+                type: "AIMessage",
+                AIMessage: imageAnalysis
+            }));
+            break;
+
+          default:
+            console.log("Unknown message type:", message_type);
+            break;
+        }
+      } catch (error) {
+        console.error("Error processing message:", error);
+        socket.send(JSON.stringify({
+            type: "AIMessage",
+            AIMessage: "Sorry, something went wrong processing your request."
+        }));
       }
     });
+
+    //   const parsed_message = JSON.parse(message);
+    //   const message_type = parsed_message.type;
+    //   switch (message_type) {
+    //     case "HumanMessage":
+    //       //logic to send human message to our agent
+    //       const human_message = parsed_message.human_message;
+
+    //       const response = await halalify.invoke({
+    //         messages: [new HumanMessage(human_message)],
+    //       });
+
+    //       console.log("AI Response", response.messages[1].content);
+    //       const agentResponse = response.messages[1].content;
+    //       socket.send(
+    //         JSON.stringify({
+    //           type: "AIMessage",
+    //           AIMessage: agentResponse || "",
+    //         })
+    //       );
+    //       break;
+    //     default:
+    //       break;
+    //   }
+    // });
 
     socket.on("error", (error) => {
       console.error(`Server error: ${error.message}`);
