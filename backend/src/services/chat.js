@@ -1,14 +1,17 @@
 import dotenv from "dotenv";
 import { createAgent } from "langchain";
 import { ChatGroq } from "@langchain/groq";
-import { HumanMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import googleSearch from "../tools/googleSearch.js";
-import { analyzeImage } from './visionService.js';
+import { analyzeImage } from "./visionService.js";
 import { WebSocketServer } from "ws";
+import { MemorySaver } from "@langchain/langgraph";
 
 dotenv.config();
+
+const checkpointer = new MemorySaver();
 const model = new ChatGroq({
-  model: "llama-3.3-70b-versatile",
+  model: "openai/gpt-oss-120b",
   apiKey: process.env.GROQ_AI_API_KEY,
   temperature: 0,
   maxRetries: 2,
@@ -70,8 +73,9 @@ You can only analyze images related to:
 
 const halalify = createAgent({
   model,
-  tools: [],
+  tools: [googleSearch],
   systemPrompt: system_instructions,
+  // checkpointer: checkpointer,
 });
 
 const WEBSOCKET_PORT = 9000;
@@ -88,9 +92,8 @@ const startChat = () => {
   });
   wss.on("connection", (socket) => {
     console.log(`Client connected at ${WEBSOCKET_PORT}!`);
-
+    const conversation_history = [];
     socket.on("message", async (message) => {
-      console.log(`Message received from client ${message}`);
       try {
         const parsed_message = JSON.parse(message);
         const message_type = parsed_message.type;
@@ -99,12 +102,17 @@ const startChat = () => {
           case "HumanMessage":
             const human_message = parsed_message.human_message;
 
+            conversation_history.push(new HumanMessage(human_message || ""));
             const response = await halalify.invoke({
-              messages: [new HumanMessage(human_message)],
+              messages: conversation_history,
             });
 
-            const agentResponse = response.messages[1].content;
-            
+            // CRITICAL: Get LAST message, not messages[1]
+            const agentResponse =
+              response.messages[response.messages.length - 1].content;
+
+            // push the latest ai message
+            conversation_history.push(new AIMessage(agentResponse || ""));
             socket.send(
               JSON.stringify({
                 type: "AIMessage",
@@ -115,20 +123,27 @@ const startChat = () => {
 
           case "ImageMessage":
             console.log("📸 Image received in Backend");
-            
-            socket.send(JSON.stringify({
+
+            socket.send(
+              JSON.stringify({
                 type: "AIMessage",
-                AIMessage: "🔍 Analyzing image..."
-            }));
+                AIMessage: "🔍 Analyzing image...",
+              })
+            );
 
-            const userPrompt = parsed_message.prompt; 
+            const userPrompt = parsed_message.prompt;
 
-            const imageAnalysis = await analyzeImage(parsed_message.image, userPrompt);
+            const imageAnalysis = await analyzeImage(
+              parsed_message.image,
+              userPrompt
+            );
 
-            socket.send(JSON.stringify({
+            socket.send(
+              JSON.stringify({
                 type: "AIMessage",
-                AIMessage: imageAnalysis
-            }));
+                AIMessage: imageAnalysis,
+              })
+            );
             break;
 
           default:
@@ -137,10 +152,12 @@ const startChat = () => {
         }
       } catch (error) {
         console.error("Error processing message:", error);
-        socket.send(JSON.stringify({
+        socket.send(
+          JSON.stringify({
             type: "AIMessage",
-            AIMessage: "Sorry, something went wrong processing your request."
-        }));
+            AIMessage: "Sorry, something went wrong processing your request.",
+          })
+        );
       }
     });
 

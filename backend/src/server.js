@@ -1,7 +1,8 @@
 import app from "../src/app.js";
+import cors from "cors";
 import { connectDB } from "../src/db/connectDB.js";
 const PORT = process.env.PORT || 3000;
-
+app.use(cors());
 // connectDB()
 //   .then(() =>
 //     console.log("Connected established with Postgres SQL successfully")
